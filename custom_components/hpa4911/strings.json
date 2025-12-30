@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add HPA4911 Device",
+        "description": "Configure your HPA4911 BGH Smart Control Kit device",
+        "data": {
+          "name": "Device Name",
+          "mac": "MAC Address (e.g., AC:CF:23:80:3D:9A)",
+          "ip": "IP Address (optional)"
+        }
+      }
+    },
+    "error": {
+      "invalid_mac": "Invalid MAC address format"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "Local BGH Smart",
+  "render_readme": true,
+  "domains": ["climate"],
+  "iot_class": "Local Polling",
+  "homeassistant": "2025.12.1"
+}
