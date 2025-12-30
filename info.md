@@ -28,4 +28,4 @@ Use the Home Assistant UI to add the integration:
 - Home Assistant 2025.12.1+
 - Local network connectivity
 
-For detailed setup instructions, troubleshooting, and technical information, see the [full README](https://github.com/penaalfr/hpa4911/blob/main/README.md).
+For detailed setup instructions, troubleshooting, and technical information, see the [full README](https://github.com/arpena/hpa4911/blob/main/README.md).

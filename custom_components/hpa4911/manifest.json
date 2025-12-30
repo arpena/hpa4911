@@ -1,9 +1,9 @@
 {
   "domain": "hpa4911",
   "name": "Local BGH Smart",
-  "codeowners": ["@penaalfr"],
+  "codeowners": ["@arpena"],
   "config_flow": true,
-  "documentation": "https://github.com/penaalfr/hpa4911",
+  "documentation": "https://github.com/arpena/hpa4911",
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": [],

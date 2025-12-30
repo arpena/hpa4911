@@ -34,7 +34,7 @@ A **local** Home Assistant integration for controlling BGH Smart HVAC units with
 2. Go to **Integrations**
 3. Click the **⋮** menu in the top right corner
 4. Select **Custom repositories**
-5. Add this repository URL: `https://github.com/penaalfr/hpa4911`
+5. Add this repository URL: `https://github.com/arpena/hpa4911`
 6. Select **Integration** as the category
 7. Click **Add**
 8. Search for "Local BGH Smart" in HACS
@@ -42,7 +42,7 @@ A **local** Home Assistant integration for controlling BGH Smart HVAC units with
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/penaalfr/hpa4911/releases)
+1. Download the latest release from the [releases page](https://github.com/arpena/hpa4911/releases)
 2. Extract the `custom_components/hpa4911` folder to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
 
@@ -111,7 +111,7 @@ logger:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests on the [GitHub repository](https://github.com/penaalfr/hpa4911).
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests on the [GitHub repository](https://github.com/arpena/hpa4911).
 
 ## License
 
