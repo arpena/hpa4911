@@ -10,8 +10,7 @@ import json
 from typing import Dict, Optional
 
 class HPA4911DeviceInfo:
-    def __init__(self, listen_port: int = 20911):
-        self.listen_port = listen_port
+    def __init__(self):
         self.devices = {}
         
     def parse_device_info_payload(self, data: bytes) -> Optional[Dict]:
@@ -73,39 +72,6 @@ class HPA4911DeviceInfo:
             return status_info
         return None
     
-    def listen_for_updates(self):
-        """Listen for UDP broadcasts and parse device info"""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(('', self.listen_port))
-        
-        print(f"Listening for HPA4911 updates on port {self.listen_port}")
-        
-        while True:
-            try:
-                data, addr = sock.recvfrom(1024)
-                
-                # Parse device info
-                device_info = self.parse_device_info_payload(data)
-                if device_info:
-                    mac = device_info['mac']
-                    if mac not in self.devices:
-                        self.devices[mac] = {}
-                    self.devices[mac].update(device_info)
-                    print(f"Device info updated: {device_info}")
-                
-                # Parse status/battery info
-                status_info = self.parse_status_payload(data)
-                if status_info:
-                    mac = status_info['mac']
-                    if mac not in self.devices:
-                        self.devices[mac] = {}
-                    self.devices[mac].update(status_info)
-                    print(f"Battery info updated: {status_info}")
-                    
-            except Exception as e:
-                print(f"Error processing packet: {e}")
-    
     def get_device_info(self, mac: str) -> Dict:
         """Get complete device info for Home Assistant"""
         # Return stored info if available, otherwise return known firmware versions
@@ -121,44 +87,18 @@ class HPA4911DeviceInfo:
             })
         
         return stored_info
+
+    def get_device_name(self, mac: str) -> str:
+        """Get device friendly name"""
+        return self.devices.get(mac, {}).get('name', f"HPA-4911_{mac.replace(':', '')}")
+
+    def set_device_info(self, mac: str, name: str, ip_address: str):
+        """Set device friendly name and ip address"""
+        if mac not in self.devices:
+            self.devices[mac] = {}
+        self.devices[mac]['name'] = name
+        self.devices[mac]['ip_address'] = ip_address
     
     def get_all_devices(self) -> Dict:
         """Get all discovered devices"""
         return self.devices
-
-# Home Assistant integration helper
-class HADeviceInfoSensor:
-    """Home Assistant sensor for device firmware and battery info"""
-    
-    def __init__(self, device_listener: HPA4911DeviceInfo):
-        self.listener = device_listener
-    
-    def get_device_attributes(self, mac: str) -> Dict:
-        """Get device attributes for HA sensor"""
-        info = self.listener.get_device_info(mac)
-        
-        attributes = {}
-        if 'main_firmware' in info:
-            attributes['firmware_version'] = info['main_firmware']
-        if 'ble_firmware' in info:
-            attributes['ble_firmware_version'] = info['ble_firmware']
-        if 'device_model' in info:
-            attributes['device_model'] = info['device_model']
-        if 'ir_battery_level' in info:
-            attributes['ir_battery_level'] = info['ir_battery_level']
-            attributes['ir_battery_raw'] = info['ir_battery_raw']
-            
-        return attributes
-
-if __name__ == "__main__":
-    # Test the device info parser
-    listener = HPA4911DeviceInfo()
-    
-    # Simulate device info packet
-    test_payload = bytes.fromhex('00accf237772d4ffffffffffffff030000fc044850412d343931312c312e302e302e31372c4850412d343931312d424c452c312e302e302e34')
-    
-    info = listener.parse_device_info_payload(test_payload)
-    print("Parsed device info:", json.dumps(info, indent=2))
-    
-    # For actual use, uncomment:
-    # listener.listen_for_updates()

@@ -29,8 +29,8 @@ _shared_client: HPA4911AsyncClient = None
 _device_entities: Dict[str, 'HPA4911Climate'] = {}
 _device_ip_to_mac: Dict[str, str] = {}
 
-# Global device info listener
-_device_listener: HPA4911DeviceInfo = None
+# Global device info 
+_device_info: HPA4911DeviceInfo = None
 
 # Local protocol mode mapping (matches cloud implementation)
 HPA4911_TO_HA_MODE = {
@@ -69,14 +69,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Local BGH Smart climate entities."""
-    global _shared_client, _device_entities, _device_ip_to_mac, _device_listener
+    global _shared_client, _device_entities, _device_ip_to_mac, _device_info
     
     config = hass.data[DOMAIN][config_entry.entry_id]
     _LOGGER.debug("Setting up HPA4911 device: %s", config)
     
-    # Initialize device info listener if not exists
-    if _device_listener is None:
-        _device_listener = HPA4911DeviceInfo()
+    # Initialize device info if not exists
+    if _device_info is None:
+        _device_info = HPA4911DeviceInfo()
+    
+    _device_info.set_device_info(config["mac"], config["name"], config["ip_address"])
+    _LOGGER.debug("Device info registered: %s", _device_info.get_device_info(config["mac"]))
     
     # Initialize shared client if not exists
     if _shared_client is None:
@@ -98,21 +101,22 @@ async def async_setup_entry(
     _device_entities[config["mac"]] = entity
     _device_ip_to_mac[config["ip_address"]] = config["mac"]
     async_add_entities([entity])
+    _LOGGER.debug("HPA4911 climate entity setup completed for %s", config["name"])
 
 def _handle_device_info_update(data: bytes, source_ip: str) -> None:
     """Handle device info updates from UDP packets."""
-    global _device_listener
+    global _device_info
     
-    if _device_listener:
+    if _device_info:
         # Parse device info
-        device_info = _device_listener.parse_device_info_payload(data)
+        device_info = _device_info.parse_device_info_payload(data)
         if device_info:
             _LOGGER.debug(f"Device info updated: {device_info}")
             # Trigger sensor updates for this MAC
             _trigger_sensor_updates(device_info['mac'])
         
         # Parse status/battery info
-        status_info = _device_listener.parse_status_payload(data)
+        status_info = _device_info.parse_status_payload(data)
         if status_info:
             _LOGGER.debug(f"Battery info updated: {status_info}")
             # Trigger sensor updates for this MAC
@@ -252,15 +256,9 @@ class HPA4911Climate(ClimateEntity):
         if status.mode == 0:
             self._attr_hvac_action = HVACAction.OFF
         elif status.mode == 1:  # Cool
-            if status.measured_temp > status.desired_temp:
-                self._attr_hvac_action = HVACAction.COOLING
-            else:
-                self._attr_hvac_action = HVACAction.IDLE
+            self._attr_hvac_action = HVACAction.COOLING
         elif status.mode == 2:  # Heat
-            if status.measured_temp < status.desired_temp:
-                self._attr_hvac_action = HVACAction.HEATING
-            else:
-                self._attr_hvac_action = HVACAction.IDLE
+            self._attr_hvac_action = HVACAction.HEATING
         else:
             self._attr_hvac_action = HVACAction.IDLE
         
