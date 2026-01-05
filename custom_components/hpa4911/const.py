@@ -6,4 +6,5 @@ from typing import Final
 DOMAIN: Final = "hpa4911"
 INTEGRATION_NAME: Final = "Local BGH Smart"
 
-ATTR_MANUFACTURER: Final = "BGH"
+MANUFACTURER: Final = "BGH"
+MODEL: Final = "HPA4911 Smart Control Kit",

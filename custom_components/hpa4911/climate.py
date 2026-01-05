@@ -18,9 +18,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
 
 from .hpa4911_client import HPA4911AsyncClient, HVACStatus
-from .device_info import HPA4911DeviceInfo
 
-from .const import DOMAIN
+from .const import DOMAIN, MANUFACTURER, MODEL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,9 +27,6 @@ _LOGGER = logging.getLogger(__name__)
 _shared_client: HPA4911AsyncClient = None
 _device_entities: Dict[str, 'HPA4911Climate'] = {}
 _device_ip_to_mac: Dict[str, str] = {}
-
-# Global device info 
-_device_info: HPA4911DeviceInfo = None
 
 # Local protocol mode mapping (matches cloud implementation)
 HPA4911_TO_HA_MODE = {
@@ -63,30 +59,26 @@ HPA4911_TO_HA_SWING = {
     203: SWING_OFF
 }
 
+# status subscriptions are maintained for 2 minutes by the device
+from datetime import timedelta
+SCAN_INTERVAL = timedelta(minutes=2)
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Local BGH Smart climate entities."""
-    global _shared_client, _device_entities, _device_ip_to_mac, _device_info
+    global _shared_client, _device_entities, _device_ip_to_mac
     
     config = hass.data[DOMAIN][config_entry.entry_id]
     _LOGGER.debug("Setting up HPA4911 device: %s", config)
-    
-    # Initialize device info if not exists
-    if _device_info is None:
-        _device_info = HPA4911DeviceInfo()
-    
-    _device_info.set_device_info(config["mac"], config["name"], config["ip_address"])
-    _LOGGER.debug("Device info registered: %s", _device_info.get_device_info(config["mac"]))
     
     # Initialize shared client if not exists
     if _shared_client is None:
         _LOGGER.debug("Initializing shared HPA4911 client...")
         _shared_client = HPA4911AsyncClient()
-        _shared_client.set_status_callback(_handle_shared_status_update)
-        _shared_client.set_device_info_callback(_handle_device_info_update)
+        _shared_client.set_climate_callback(_handle_shared_climate_update)
         try:
             await _shared_client.connect()
             _LOGGER.debug("Shared HPA4911 client initialized successfully")
@@ -101,33 +93,10 @@ async def async_setup_entry(
     _device_entities[config["mac"]] = entity
     _device_ip_to_mac[config["ip_address"]] = config["mac"]
     async_add_entities([entity])
+    await entity.async_update()
     _LOGGER.debug("HPA4911 climate entity setup completed for %s", config["name"])
 
-def _handle_device_info_update(data: bytes, source_ip: str) -> None:
-    """Handle device info updates from UDP packets."""
-    global _device_info
-    
-    if _device_info:
-        # Parse device info
-        device_info = _device_info.parse_device_info_payload(data)
-        if device_info:
-            _LOGGER.debug(f"Device info updated: {device_info}")
-            # Trigger sensor updates for this MAC
-            _trigger_sensor_updates(device_info['mac'])
-        
-        # Parse status/battery info
-        status_info = _device_info.parse_status_payload(data)
-        if status_info:
-            _LOGGER.debug(f"Battery info updated: {status_info}")
-            # Trigger sensor updates for this MAC
-            _trigger_sensor_updates(status_info['mac'])
-
-def _trigger_sensor_updates(mac: str) -> None:
-    """Trigger sensor updates for a specific MAC address."""
-    # This will be handled by the sensor entities checking for updates
-    pass
-
-def _handle_shared_status_update(status: HVACStatus, source_ip: str) -> None:
+def _handle_shared_climate_update(status: HVACStatus, source_ip: str) -> None:
     """Handle status update from shared client and route to correct entity."""
     global _device_ip_to_mac, _device_entities
     
@@ -139,10 +108,8 @@ def _handle_shared_status_update(status: HVACStatus, source_ip: str) -> None:
             _LOGGER.debug("Routed status update from %s to device %s", source_ip, device_mac)
             return
     
-    # Fallback: send to all entities if IP mapping fails
-    _LOGGER.warning("Could not route status update from %s, sending to all devices", source_ip)
-    for entity in _device_entities.values():
-        entity._handle_status_update(status)
+    # Log status update if not found (shouldn't happen)
+    _LOGGER.warning("Could not route status update from %s", source_ip)
 
 class HPA4911Climate(ClimateEntity):
     """Local BGH Smart climate entity."""
@@ -152,6 +119,7 @@ class HPA4911Climate(ClimateEntity):
         self._device_config = device_config
         self._attr_name = device_config["name"]
         self._attr_unique_id = device_config["mac"].replace(":", "")
+        self._attr_should_poll = True
         
         # Debug: Log the current configuration
         _LOGGER.debug("Device config: %s", device_config)
@@ -160,9 +128,8 @@ class HPA4911Climate(ClimateEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device_config["mac"])},
             name=device_config["name"],
-            manufacturer="BGH",
-            model="HPA4911 Smart Control Kit",
-            sw_version="1.0",
+            manufacturer=MANUFACTURER,
+            model=MODEL,
         )
         
         self._client = shared_client
@@ -197,57 +164,38 @@ class HPA4911Climate(ClimateEntity):
         self._attr_min_temp = 16
         self._attr_max_temp = 30
         self._attr_target_temperature_step = 1
-        
-        self._update_task = None
+        self._attr_available = False
+        self._last_update_time = None 
     
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        _LOGGER.debug("Adding HPA4911 climate entity: %s", self._attr_name)
-        # Client is already connected in setup, start periodic updates
-        self._update_task = asyncio.create_task(self._periodic_update())
-    
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is removed from hass."""
-        if self._update_task:
-            self._update_task.cancel()
-        # Don't close shared client
-
     async def async_update(self) -> None:
-        """Fetch new state data for this HVAC."""
-        _LOGGER.debug("async_update called for %s", self._attr_name)
+        """Send request to receive new state data for this HVAC."""
         try:
-            await self._client.trigger_hvac_status(
+            await self._client.subscribe_hvac_status(
                 self._device_config["mac"],
                 self._device_config.get("ip_address")
             )
+            await self._client.request_device_info(
+                self._device_config.get("ip_address")
+            )
+            await self._client.request_battery_status(
+                self._device_config["mac"],
+                self._device_config.get("ip_address")
+            )
+            if self._last_update_time is None or asyncio.get_event_loop().time() - self._last_update_time > 120:
+                self._attr_available = False
             _LOGGER.debug("Status request sent to %s at %s", 
                         self._device_config["mac"], 
                         self._device_config.get("ip_address"))
         except Exception as e:
             _LOGGER.error("Error updating %s: %s", self._attr_name, e)
     
-    async def _periodic_update(self) -> None:
-        """Periodically request status updates."""
-        # Wait a bit to ensure client is fully initialized
-        await asyncio.sleep(5)
-        
-        while True:
-            try:
-                await self._client.trigger_hvac_status(
-                    self._device_config["mac"],
-                    self._device_config.get("ip_address")
-                )
-                await asyncio.sleep(30)  # Update every 30 seconds
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                _LOGGER.error("Error updating %s: %s", self._attr_name, e)
-                await asyncio.sleep(60)  # Retry after 1 minute on error
-    
     def _handle_status_update(self, status: HVACStatus) -> None:
         """Handle status update from device."""
         _LOGGER.debug("Status update received for %s: mode=%s, temp=%s->%s, fan=%s, flags=%s", 
                     self._attr_name, status.mode, status.measured_temp, status.desired_temp, status.fan_mode, status.flags)
+        
+        self._last_update_time = asyncio.get_event_loop().time()
+        self._attr_available = True
         self._attr_current_temperature = status.measured_temp
         self._attr_target_temperature = status.desired_temp
         self._attr_hvac_mode = HPA4911_TO_HA_MODE.get(status.mode, HVACMode.OFF)
@@ -259,6 +207,12 @@ class HPA4911Climate(ClimateEntity):
             self._attr_hvac_action = HVACAction.COOLING
         elif status.mode == 2:  # Heat
             self._attr_hvac_action = HVACAction.HEATING
+        elif status.mode == 3:  # Dry
+            self._attr_hvac_action = HVACAction.DRYING
+        elif status.mode == 4:  # Fan
+            self._attr_hvac_action = HVACAction.FAN
+        elif status.mode == 254:  # Auto
+            self._attr_hvac_action = HVACAction.HEATING if status.desired_temp > status.measured_temp else HVACAction.COOLING
         else:
             self._attr_hvac_action = HVACAction.IDLE
         

@@ -19,17 +19,19 @@ class HVACStatus:
     timer_off_minutes: int
 
 @dataclass
-class HPA4910Status:
-    rssi: int
-    battery_level: int
-    ir_mac_address: str
+class DeviceStatus:
+    rssi: Optional[int] = None
+    battery_level: Optional[int] = None
+    ir_mac_address: Optional[str] = None
+    firmware: Optional[str] = None
+    firmware_info: Optional[str] = None
 
 @dataclass
 class DeviceResponse:
     command_id: int
     payload: bytes = b''
     hvac_status: Optional[HVACStatus] = None
-    hpa4910_status: Optional[HPA4910Status] = None
+    device_status: Optional[DeviceStatus] = None
 
 class HPA4911AsyncClient:
     """Async UDP client for HPA4911 devices"""
@@ -49,14 +51,13 @@ class HPA4911AsyncClient:
         import logging
         self._logger = logging.getLogger(__name__)
     
-    def set_status_callback(self, callback: Callable):
+    def set_climate_callback(self, callback: Callable):
         """Set callback for status updates"""
-        self._status_callback = callback
-    
+        self._climate_callback = callback
         
-    def set_device_info_callback(self, callback: Callable):
+    def set_sensor_callback(self, callback: Callable):
         """Set callback for device info updates"""
-        self._device_info_callback = callback
+        self._sensor_callback = callback
     
     async def connect(self):
         """Connect using asyncio UDP"""
@@ -64,7 +65,7 @@ class HPA4911AsyncClient:
         loop = asyncio.get_event_loop()
         try:
             self.transport, self.protocol = await loop.create_datagram_endpoint(
-                lambda: UDPProtocol(self._handle_response, self._device_info_callback),
+                lambda: UDPProtocol(self._handle_response),
                 local_addr=('0.0.0.0', self.PORT_SERVER),
                 allow_broadcast=True
             )
@@ -75,10 +76,10 @@ class HPA4911AsyncClient:
 
     def _handle_response(self, response: DeviceResponse, addr: str):
         """Handle decoded response"""
-        if response.hvac_status and self._status_callback:
-            self._status_callback(response.hvac_status, addr)
-        elif response.hpa4910_status and self._status_callback:
-            self._status_callback(response.hpa4910_status, addr)
+        if response.hvac_status and self._climate_callback:
+            self._climate_callback(response.hvac_status, addr)
+        elif response.device_status and self._sensor_callback:
+            self._sensor_callback(response.device_status, addr)
     
     def _create_header(self, dest_mac: bytes, cmd_id: int, src_endpoint: int = 0, dest_endpoint: int = 0) -> bytes:
         """Create 17-byte UDP packet header"""
@@ -94,7 +95,7 @@ class HPA4911AsyncClient:
         self.sequence = (self.sequence + 1) % 256
         return bytes(header)
     
-    async def trigger_hvac_status(self, device_mac: str, device_ip: str = None):
+    async def subscribe_hvac_status(self, device_mac: str, device_ip: str = None):
         """Request HVAC status from device"""
         if not self.transport:
             await self.connect()
@@ -113,7 +114,7 @@ class HPA4911AsyncClient:
         poll_header = self._create_header(broadcast_mac, 228, dest_endpoint=1)  # CMD_POLL to endpoint 1
         self.transport.sendto(poll_header, (target_ip, self.PORT_CLIENT))
 
-    async def request_device_info(self, mac_address: str):
+    async def request_device_info(self, device_ip: str = None):
         """Send Join Enumerate request to get device firmware info"""
         if not self.transport:
             await self.connect()
@@ -137,11 +138,17 @@ class HPA4911AsyncClient:
             await self.connect()
         
         mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
+        target_ip = device_ip or self.BROADCAST_IP
+        
+        # Step 1: Send CUSTOM command STATUS REQUEST
         header = self._create_header(mac_bytes, 162)  # CMD_CUSTOM
         packet = header + bytes([92])  # CUSTOM_STATUS_REQUEST
-        
-        target_ip = device_ip or self.BROADCAST_IP
         self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
+        
+        # Step 2: Poll HVAC endpoint for status
+        broadcast_mac = b'\xff\xff\xff\xff\xff\xff'
+        poll_header = self._create_header(broadcast_mac, 228, dest_endpoint=1)  # CMD_POLL to endpoint 1
+        self.transport.sendto(poll_header, (target_ip, self.PORT_CLIENT))
     
     async def set_hvac_mode(self, device_mac: str, mode: int, device_ip: str = None):
         """Set HVAC mode (1=Cool, 2=Heat, 3=Dry, 4=Fan, 254=Auto)"""
@@ -309,9 +316,8 @@ class HPA4911AsyncClient:
 class UDPProtocol(asyncio.DatagramProtocol):
     """UDP Protocol handler"""
     
-    def __init__(self, response_handler: Callable, device_info_callback: Optional[Callable] = None):
+    def __init__(self, response_handler: Callable):
         self.response_handler = response_handler
-        self.device_info_callback = device_info_callback
         
         # Set up logger
         import logging
@@ -320,10 +326,6 @@ class UDPProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         """Handle received data"""
         try:
-            # Call device info callback for all packets
-            if self.device_info_callback:
-                self.device_info_callback(data, addr[0])
-                
             response = self._decode_response(data)
             if response:
                 self.response_handler(response, addr[0])
@@ -385,12 +387,12 @@ class UDPProtocol(asyncio.DatagramProtocol):
                 battery = (payload[3] << 8 | payload[2])
                 ir_mac_formatted = ':'.join(f'{b:02X}' for b in payload[6:13])
                 
-                response.hpa4910_status = HPA4910Status(
+                response.device_status = DeviceStatus(
                     rssi=rssi,
                     battery_level=battery,
                     ir_mac_address=ir_mac_formatted
                 )
-                self._logger.debug(f"HPA4910 Status Response from {mac_address}: {response.hpa4910_status}")
+                self._logger.debug(f"Device Info Response from {mac_address}: {response.device_status}")
         
         # Decode Join Enumerate Response (command 161, subcommand 2)
         elif command_id == 161 and len(payload) >= 1:
@@ -398,13 +400,16 @@ class UDPProtocol(asyncio.DatagramProtocol):
             if subcommand == 2:  # Enumerate Response
                 # Extract firmware info from payload[1:]
                 try:
-                    firmware_data = payload[1:].decode('utf-8', errors='ignore').rstrip('\x00')
-                    if ',' in firmware_data:
-                        parts = firmware_data.split(',')
-                        device_model = parts[0] if len(parts) > 0 else ""
-                        firmware_version = parts[1] if len(parts) > 1 else ""
-                        self._logger.debug(f"Join Enumerate Response from {mac_address}: Model={device_model}, Firmware={firmware_version}")
+                    firmware_info = payload[1:].decode('utf-8', errors='ignore').rstrip('\x00')
+                    if ',' in firmware_info:
+                        parts = firmware_info.split(',')
+                        firmware = parts[1] if len(parts) > 1 else ""
+                        response.device_status = DeviceStatus(
+                            firmware=firmware,
+                            firmware_info=firmware_info
+                        )
+                        self._logger.debug(f"Device Info Response from {mac_address}: Firmware Info={firmware_info}")
                 except Exception as e:
-                    print(f"Error decoding Join response: {e}")
+                    self._logger.warning(f"Error decoding Join response: {e}")
         
         return response
