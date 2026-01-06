@@ -236,12 +236,6 @@ class HPA4911Climate(ClimateEntity):
                 mode,
                 self._device_config.get("ip_address")
             )
-            # Request immediate status update
-            await asyncio.sleep(1)
-            await self._client.trigger_hvac_status(
-                self._device_config["mac"],
-                self._device_config.get("ip_address")
-            )
     
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
@@ -260,12 +254,6 @@ class HPA4911Climate(ClimateEntity):
                 False,  # vertical_swing
                 self._device_config.get("ip_address")
             )
-            # Request immediate status update
-            await asyncio.sleep(1)
-            await self._client.trigger_hvac_status(
-                self._device_config["mac"],
-                self._device_config.get("ip_address")
-            )
     
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new fan mode."""
@@ -280,12 +268,6 @@ class HPA4911Climate(ClimateEntity):
                 HA_TO_HPA4911_FAN[fan_mode],
                 0,  # flags
                 float(current_temp),
-                self._device_config.get("ip_address")
-            )
-            # Request immediate status update
-            await asyncio.sleep(1)
-            await self._client.trigger_hvac_status(
-                self._device_config["mac"],
                 self._device_config.get("ip_address")
             )
     
@@ -315,10 +297,5 @@ class HPA4911Climate(ClimateEntity):
                 device_ip=self._device_config.get("ip_address")
             )
         
-        # Update state and trigger refresh
+        # Update state 
         self._attr_swing_mode = swing_mode
-        await asyncio.sleep(1)
-        await self._client.trigger_hvac_status(
-            self._device_config["mac"],
-            self._device_config.get("ip_address")
-        )
