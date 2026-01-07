@@ -114,6 +114,10 @@ class HPA4911AsyncClient:
         poll_header = self._create_header(broadcast_mac, 228, dest_endpoint=1)  # CMD_POLL to endpoint 1
         self.transport.sendto(poll_header, (target_ip, self.PORT_CLIENT))
 
+    async def trigger_hvac_status(self, device_mac: str, device_ip: str = None):
+        """Trigger immediate HVAC status update (alias for subscribe_hvac_status)"""
+        await self.subscribe_hvac_status(device_mac, device_ip)
+
     async def request_device_info(self, device_ip: str = None):
         """Send Join Enumerate request to get device firmware info"""
         if not self.transport:
