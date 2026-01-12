@@ -20,7 +20,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): str,
         vol.Required(CONF_MAC): cv.string,
-        vol.Optional(CONF_IP_ADDRESS): cv.string,
+        vol.Required(CONF_IP_ADDRESS): cv.string,
     }
 )
 
@@ -41,7 +41,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             mac = user_input[CONF_MAC].upper().replace("-", ":")
             if not self._is_valid_mac(mac):
                 errors[CONF_MAC] = "invalid_mac"
-            else:
+            
+            # Validate IP address format
+            ip_address = user_input[CONF_IP_ADDRESS]
+            if not self._is_valid_ip(ip_address):
+                errors[CONF_IP_ADDRESS] = "invalid_ip"
+            
+            if not errors:
                 # Create unique ID from MAC address
                 await self.async_set_unique_id(mac.replace(":", ""))
                 self._abort_if_unique_id_configured()
@@ -51,7 +57,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_NAME: user_input[CONF_NAME],
                         CONF_MAC: mac,
-                        CONF_IP_ADDRESS: user_input.get(CONF_IP_ADDRESS),
+                        CONF_IP_ADDRESS: ip_address,
                     },
                 )
 
@@ -65,3 +71,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Validate MAC address format."""
         import re
         return bool(re.match(r"^([0-9A-F]{2}[:]){5}([0-9A-F]{2})$", mac))
+
+    def _is_valid_ip(self, ip: str) -> bool:
+        """Validate IP address format."""
+        import ipaddress
+        try:
+            ipaddress.ip_address(ip)
+            return True
+        except ValueError:
+            return False

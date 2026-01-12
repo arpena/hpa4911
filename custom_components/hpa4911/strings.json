@@ -7,12 +7,13 @@
         "data": {
           "name": "Device Name",
           "mac": "MAC Address (e.g., AC:CF:23:80:3D:9A)",
-          "ip": "IP Address (optional)"
+          "ip": "IP Address"
         }
       }
     },
     "error": {
-      "invalid_mac": "Invalid MAC address format"
+      "invalid_mac": "Invalid MAC address format",
+      "invalid_ip": "Invalid IP address format"
     }
   }
 }

@@ -7,9 +7,10 @@ A **local** Home Assistant integration for controlling BGH Smart HVAC units with
 ## Features
 
 - **Local Control**: Direct communication with your BGH Smart devices via UDP protocol
-- **Real-time Updates**: Automatic status updates every 30 seconds
+- **Subscription-based Updates**: Real-time status updates using device subscriptions (2-minute intervals)
 - **Full Climate Control**: Temperature, HVAC modes, fan speeds, and swing control
-- **Device Discovery**: Automatic device information parsing
+- **Device Sensors**: Firmware version and IR module battery level monitoring
+- **Shared Coordinator**: Efficient single UDP client handling multiple devices
 - **Config Flow**: Easy setup through Home Assistant UI
 
 ### Supported HVAC Features
@@ -19,11 +20,17 @@ A **local** Home Assistant integration for controlling BGH Smart HVAC units with
 - **Swing Control**: Horizontal swing on/off
 - **Temperature Control**: 16°C - 30°C range with 1°C steps
 - **Current Temperature**: Real-time temperature readings
+- **HVAC Actions**: Displays current activity (Cooling, Heating, Drying, Fan, Idle, Off)
+
+### Additional Sensors
+
+- **Firmware Version**: Device firmware information
+- **IR Battery Level**: Battery percentage of the IR module
 
 ## Requirements
 
 - BGH Smart HVAC unit with HPA4911 Smart Control Kit
-- Home Assistant 2025.12.1 or later
+- Home Assistant 2023.1 or later
 - Local network connectivity to your BGH Smart devices
 
 ## Installation
@@ -57,8 +64,8 @@ This integration uses **Config Flow** for easy setup through the Home Assistant 
 3. Search for "Local BGH Smart"
 4. Enter the required information:
    - **Name**: A friendly name for your device
-   - **MAC Address**: The MAC address of your BGH Smart device
-   - **IP Address** (optional): The IP address of your device (helps with faster communication)
+   - **MAC Address**: The MAC address of your BGH Smart device (required)
+   - **IP Address**: The IP address of your device (required for communication)
 
 ### Finding Your Device Information
 
@@ -67,30 +74,55 @@ To find your device's MAC address and IP:
 1. Check your router's connected devices list
 2. Look for devices with "BGH" or similar manufacturer names
 3. The MAC address format should be like: `AA:BB:CC:DD:EE:FF`
-4. You can also use network scanning tools to discover devices on your network
+4. Note the current IP address assigned to the device
+5. You can also use network scanning tools to discover devices on your network
+
+**Important**: Both MAC address and IP address are now required fields for proper device communication.
 
 ## Usage
 
 Once configured, your BGH Smart device will appear as a climate entity in Home Assistant with the following controls:
 
-- **Temperature Control**: Set target temperature
+### Climate Entity
+- **Temperature Control**: Set target temperature (16°C - 30°C)
 - **Mode Selection**: Choose between Off, Cool, Heat, Dry, Fan Only, and Auto
 - **Fan Speed**: Select Low, Medium, High, or Auto fan speeds
 - **Swing Control**: Toggle horizontal swing on/off
+- **Current Status**: View current temperature and HVAC action
+
+### Additional Sensors
+- **Firmware Version**: Monitor device firmware information
+- **IR Battery Level**: Track the battery percentage of the IR module
+
+## Technical Details
+
+- **Communication Protocol**: UDP-based local protocol with device subscriptions
+- **Update Method**: Subscription-based updates (devices maintain subscriptions for 2 minutes)
+- **Device Type**: Climate entity with diagnostic sensors
+- **IoT Class**: Local Polling
+- **Shared Resources**: Single UDP client handles multiple devices efficiently
 
 ## Troubleshooting
 
 ### Device Not Responding
 
 - Ensure your BGH Smart device is connected to the same network as Home Assistant
-- Verify the MAC address is correct (format: `AA:BB:CC:DD:EE:FF`)
+- Verify both the MAC address and IP address are correct
 - Check if the IP address is still valid (devices may get new IPs from DHCP)
+- Ensure your network allows UDP communication between Home Assistant and the device
 
 ### Status Updates Not Working
 
-- The integration polls for status every 30 seconds
+- The integration uses subscription-based updates (2-minute subscription intervals)
 - Check Home Assistant logs for any error messages
-- Ensure your network allows UDP communication between Home Assistant and the device
+- Verify UDP communication is not blocked by firewall rules
+- Try restarting the integration if subscriptions seem stuck
+
+### Multiple Devices
+
+- The integration uses a shared coordinator for efficient communication
+- All devices share a single UDP client to minimize network overhead
+- Each device maintains its own subscription with the coordinator
 
 ### Logs
 
@@ -104,10 +136,11 @@ logger:
 
 ## Technical Details
 
-- **Communication Protocol**: UDP-based local protocol
-- **Update Frequency**: 30-second polling interval
-- **Device Type**: Climate entity with sensor capabilities
+- **Communication Protocol**: UDP-based local protocol with device subscriptions
+- **Update Method**: Subscription-based updates (devices maintain subscriptions for 2 minutes)
+- **Device Type**: Climate entity with diagnostic sensors
 - **IoT Class**: Local Polling
+- **Shared Resources**: Single UDP client handles multiple devices efficiently
 
 ## Contributing
 
