@@ -80,8 +80,11 @@ class HPA4911BatterySensor(HPA4911Entity, SensorEntity):
             
         device_status = device_data.get("device_status")
         if device_status and device_status.battery_level is not None:
-            self._attr_native_value = device_status.battery_level
-            _LOGGER.debug(f"Updated battery sensor to {device_status.battery_level}")
+            if self._attr_native_value != 0 and device_status.battery_level == 0:
+                _LOGGER.debug("Battery level received 0. Maintaining old value")
+            else:
+                self._attr_native_value = device_status.battery_level
+                _LOGGER.debug(f"Updated battery sensor to {device_status.battery_level}")
         
         super()._handle_coordinator_update()
     

@@ -62,16 +62,39 @@ class HPA4911AsyncClient:
     async def connect(self):
         """Connect using asyncio UDP"""
         # We need to bind to server port, if not the integration will not receive all updates
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
+        
+        # Log network interface information (helpful for Docker debugging)
         try:
+            import socket
+            hostname = socket.gethostname()
+            local_ip = socket.gethostbyname(hostname)
+            self._logger.debug(f"Network info - Hostname: {hostname}, Local IP: {local_ip}")
+        except Exception as e:
+            self._logger.debug(f"Could not determine network info: {e}")
+        
+        try:
+            self._logger.debug(f"Attempting to bind UDP socket to 0.0.0.0:{self.PORT_SERVER}")
             self.transport, self.protocol = await loop.create_datagram_endpoint(
                 lambda: UDPProtocol(self._handle_response),
                 local_addr=('0.0.0.0', self.PORT_SERVER),
+                reuse_port=True,
                 allow_broadcast=True
             )
-            self._logger.info(f"UDP client connected on port {self.PORT_SERVER}")
+            sock = self.transport.get_extra_info('socket')
+            self._logger.info(f"UDP client connected on port {self.PORT_SERVER}, socket: {sock.getsockname()}")
+            
+            # Log socket options (helpful for debugging)
+            try:
+                import socket as sock_module
+                so_broadcast = sock.getsockopt(sock_module.SOL_SOCKET, sock_module.SO_BROADCAST)
+                so_reuseaddr = sock.getsockopt(sock_module.SOL_SOCKET, sock_module.SO_REUSEADDR)
+                self._logger.debug(f"Socket options - SO_BROADCAST: {so_broadcast}, SO_REUSEADDR: {so_reuseaddr}")
+            except Exception as e:
+                self._logger.debug(f"Could not read socket options: {e}")
+                
         except OSError as e:
-            self._logger.error(f"Failed to bind to port {self.PORT_SERVER}")
+            self._logger.error(f"Failed to bind to port {self.PORT_SERVER}: {e}")
             raise
 
     def _handle_response(self, response: DeviceResponse, addr: str):
@@ -103,15 +126,19 @@ class HPA4911AsyncClient:
         mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
         target_ip = device_ip or self.BROADCAST_IP
         
+        self._logger.debug(f"Subscribing to HVAC status: MAC={device_mac}, IP={target_ip}")
+        
         # Step 1: Send JOIN command Subscribe
         join_header = self._create_header(mac_bytes, 161)  # CMD_JOIN
         join_data = bytes([12])  # JOIN subcommand 12 subscribe
         join_packet = join_header + join_data
+        self._logger.debug(f"Sending JOIN subscribe packet to {target_ip}:{self.PORT_CLIENT}, Packet={join_packet.hex()}")
         self.transport.sendto(join_packet, (target_ip, self.PORT_CLIENT))
         
         # Step 2: Poll HVAC endpoint for status
         broadcast_mac = b'\xff\xff\xff\xff\xff\xff'
         poll_header = self._create_header(broadcast_mac, 228, dest_endpoint=1)  # CMD_POLL to endpoint 1
+        self._logger.debug(f"Sending POLL packet to {target_ip}:{self.PORT_CLIENT}, Packet={poll_header.hex()}")
         self.transport.sendto(poll_header, (target_ip, self.PORT_CLIENT))
 
     async def trigger_hvac_status(self, device_mac: str, device_ip: str = None):
@@ -164,6 +191,7 @@ class HPA4911AsyncClient:
         packet = header + bytes([mode])
         
         target_ip = device_ip or self.BROADCAST_IP
+        self._logger.debug(f"Sending HVAC mode command: MAC={device_mac}, Mode={mode}, IP={target_ip}, Packet={packet.hex()}")
         self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
     
     async def set_hvac_full(self, device_mac: str, mode: int, fan_mode: int, flags: int, temperature: float, device_ip: str = None):
@@ -183,18 +211,7 @@ class HPA4911AsyncClient:
         packet = header + payload
         
         target_ip = device_ip or self.BROADCAST_IP
-        self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
-    
-    async def set_target_temperature(self, device_mac: str, temperature: int, device_ip: str = None):
-        """Set target temperature (16-30°C typically)"""
-        if not self.transport:
-            await self.connect()
-        
-        mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
-        header = self._create_header(mac_bytes, 98, dest_endpoint=1)  # CMD_HVAC_COMMAND
-        packet = header + bytes([temperature, 0])  # temp, fan_speed=0
-        
-        target_ip = device_ip or self.BROADCAST_IP
+        self._logger.debug(f"Sending HVAC full command: MAC={device_mac}, Mode={mode}, Fan={fan_mode}, Flags={flags}, Temp={temperature}°C, IP={target_ip}, Packet={packet.hex()}")
         self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
     
     async def set_hvac_with_swing(self, device_mac: str, mode: int, fan_mode: int, temperature: float, 
@@ -222,6 +239,7 @@ class HPA4911AsyncClient:
         packet = header + payload
         
         target_ip = device_ip or self.BROADCAST_IP
+        self._logger.debug(f"Sending HVAC with swing command: MAC={device_mac}, Mode={mode}, Fan={fan_mode}, Temp={temperature}°C, H_Swing={horizontal_swing}, V_Swing={vertical_swing}, Flags={flags}, IP={target_ip}, Packet={packet.hex()}")
         self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
     
     async def set_hvac_swing_off(self, device_mac: str, mode: int, fan_mode: int, temperature: float, device_ip: str = None):
@@ -245,59 +263,8 @@ class HPA4911AsyncClient:
         packet = header + payload
         
         target_ip = device_ip or self.BROADCAST_IP
+        self._logger.debug(f"Sending HVAC swing OFF command: MAC={device_mac}, Mode={mode}, Fan={fan_mode}, Temp={temperature}°C, Flags={flags}, IP={target_ip}, Packet={packet.hex()}")
         self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
-        
-        target_ip = device_ip or self.BROADCAST_IP
-        self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
-    
-    async def set_fan_level(self, device_mac: str, fan_level: int, device_ip: str = None):
-        """Set fan level (0=Auto, 1-5=Speed levels)"""
-        if not self.transport:
-            await self.connect()
-        
-        mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
-        header = self._create_header(mac_bytes, 98, dest_endpoint=1)  # CMD_HVAC_COMMAND
-        packet = header + bytes([25, fan_level])  # temp=25°C, fan_level
-        
-        target_ip = device_ip or self.BROADCAST_IP
-        self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
-    
-    async def toggle_vertical_swing(self, device_mac: str, device_ip: str = None):
-        """Toggle vertical swing mode"""
-        if not self.transport:
-            await self.connect()
-        
-        mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
-        header = self._create_header(mac_bytes, 98, dest_endpoint=1)  # CMD_HVAC_COMMAND
-        packet = header + bytes([97])  # HVAC_CMD_SWING_VERTICAL_TOGGLE
-        
-        print(f"Sending vertical swing packet: {packet.hex()}")
-        target_ip = device_ip or self.BROADCAST_IP
-        self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
-    
-    async def toggle_horizontal_swing(self, device_mac: str, device_ip: str = None):
-        """Toggle horizontal swing mode"""
-        if not self.transport:
-            await self.connect()
-        
-        mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
-        header = self._create_header(mac_bytes, 98, dest_endpoint=1)  # CMD_HVAC_COMMAND
-        packet = header + bytes([81])  # HVAC_CMD_SWING_HORIZONTAL_TOGGLE
-        
-        print(f"Sending horizontal swing packet: {packet.hex()}")
-        target_ip = device_ip or self.BROADCAST_IP
-        self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
-    
-    async def set_temperature_offset(self, device_mac: str, offset: int, device_ip: str = None):
-        """Set room temperature offset (-32768 to 32767)"""
-        if not self.transport:
-            await self.connect()
-        
-        import struct
-        mac_bytes = bytes.fromhex(device_mac.replace(':', ''))
-        header = self._create_header(mac_bytes, 162)  # CMD_CUSTOM
-        data = struct.pack('<BH', 101, offset & 0xFFFF)  # CUSTOM_TEMP_OFFSET + offset
-        packet = header + data
         
         target_ip = device_ip or self.BROADCAST_IP
         self.transport.sendto(packet, (target_ip, self.PORT_CLIENT))
@@ -330,6 +297,7 @@ class UDPProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         """Handle received data"""
         try:
+            self._logger.debug(f"Received packet from {addr[0]}:{addr[1]}, Length={len(data)}, Data={data.hex()}")
             response = self._decode_response(data)
             if response:
                 self.response_handler(response, addr[0])
@@ -348,7 +316,7 @@ class UDPProtocol(asyncio.DatagramProtocol):
                 self._logger.debug(f"Unhandled packet from {addr[0]} HEX: {data.hex()}")
                 
         except Exception as e:
-            self._logger.debug(f"Decode error: {e}")
+            self._logger.error(f"Decode error from {addr[0]}: {e}", exc_info=True)
     
     def _decode_response(self, data: bytes) -> Optional[DeviceResponse]:
         """Decode UDP response packet"""
