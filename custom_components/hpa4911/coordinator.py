@@ -159,21 +159,21 @@ class HPA4911Coordinator(DataUpdateCoordinator):
         if self.client and mac in self.devices:
             device_config = self.devices[mac]
             device_ip = device_config.get("ip_address")
-            _LOGGER.debug(f"Coordinator: Setting HVAC mode for device {device_config.get('name')} (MAC: {mac}, IP: {device_ip}) to mode {mode}")
+            _LOGGER.debug("Coordinator: Setting HVAC mode for device %s (MAC: %s, IP: %s) to mode %s", device_config.get('name'), mac, device_ip, mode)
             await self.client.set_hvac_mode(
                 mac,
                 mode,
                 device_ip
             )
         else:
-            _LOGGER.warning(f"Coordinator: Cannot set HVAC mode - client={self.client is not None}, device_exists={mac in self.devices}")
+            _LOGGER.warning("Coordinator: Cannot set HVAC mode - client=%s, device_exists=%s", self.client is not None, mac in self.devices)
 
     async def async_set_hvac_full(self, mac: str, mode: int, fan_mode: int, flags: int, temperature: float) -> None:
         """Set HVAC mode, fan, and temperature for a specific device."""
         if self.client and mac in self.devices:
             device_config = self.devices[mac]
             device_ip = device_config.get("ip_address")
-            _LOGGER.debug(f"Coordinator: Setting HVAC full for device {device_config.get('name')} (MAC: {mac}, IP: {device_ip}) - Mode: {mode}, Fan: {fan_mode}, Flags: {flags}, Temp: {temperature}°C")
+            _LOGGER.debug("Coordinator: Setting HVAC full for device %s (MAC: %s, IP: %s) - Mode: %s, Fan: %s, Flags: %s, Temp: %s°C", device_config.get('name'), mac, device_ip, mode, fan_mode, flags, temperature)
             await self.client.set_hvac_full(
                 mac,
                 mode,
@@ -183,7 +183,7 @@ class HPA4911Coordinator(DataUpdateCoordinator):
                 device_ip
             )
         else:
-            _LOGGER.warning(f"Coordinator: Cannot set HVAC full - client={self.client is not None}, device_exists={mac in self.devices}")
+            _LOGGER.warning("Coordinator: Cannot set HVAC full - client=%s, device_exists=%s", self.client is not None, mac in self.devices)
 
     async def async_set_hvac_with_swing(self, mac: str, mode: int, fan_mode: int, temperature: float, 
                                        horizontal_swing: bool = False, vertical_swing: bool = False) -> None:
@@ -191,7 +191,7 @@ class HPA4911Coordinator(DataUpdateCoordinator):
         if self.client and mac in self.devices:
             device_config = self.devices[mac]
             device_ip = device_config.get("ip_address")
-            _LOGGER.debug(f"Coordinator: Setting HVAC with swing for device {device_config.get('name')} (MAC: {mac}, IP: {device_ip}) - Mode: {mode}, Fan: {fan_mode}, Temp: {temperature}°C, H_Swing: {horizontal_swing}, V_Swing: {vertical_swing}")
+            _LOGGER.debug("Coordinator: Setting HVAC with swing for device %s (MAC: %s, IP: %s) - Mode: %s, Fan: %s, Temp: %s°C, H_Swing: %s, V_Swing: %s", device_config.get('name'), mac, device_ip, mode, fan_mode, temperature, horizontal_swing, vertical_swing)
             await self.client.set_hvac_with_swing(
                 mac,
                 mode,
@@ -202,14 +202,14 @@ class HPA4911Coordinator(DataUpdateCoordinator):
                 device_ip
             )
         else:
-            _LOGGER.warning(f"Coordinator: Cannot set HVAC with swing - client={self.client is not None}, device_exists={mac in self.devices}")
+            _LOGGER.warning("Coordinator: Cannot set HVAC with swing - client=%s, device_exists=%s", self.client is not None, mac in self.devices)
 
     async def async_set_hvac_swing_off(self, mac: str, mode: int, fan_mode: int, temperature: float) -> None:
         """Turn off HVAC swing for a specific device."""
         if self.client and mac in self.devices:
             device_config = self.devices[mac]
             device_ip = device_config.get("ip_address")
-            _LOGGER.debug(f"Coordinator: Setting HVAC swing OFF for device {device_config.get('name')} (MAC: {mac}, IP: {device_ip}) - Mode: {mode}, Fan: {fan_mode}, Temp: {temperature}°C")
+            _LOGGER.debug("Coordinator: Setting HVAC swing OFF for device %s (MAC: %s, IP: %s) - Mode: %s, Fan: %s, Temp: %s°C", device_config.get('name'), mac, device_ip, mode, fan_mode, temperature)
             await self.client.set_hvac_swing_off(
                 mac,
                 mode,
@@ -218,7 +218,7 @@ class HPA4911Coordinator(DataUpdateCoordinator):
                 device_ip
             )
         else:
-            _LOGGER.warning(f"Coordinator: Cannot set HVAC swing off - client={self.client is not None}, device_exists={mac in self.devices}")
+            _LOGGER.warning("Coordinator: Cannot set HVAC swing off - client=%s, device_exists=%s", self.client is not None, mac in self.devices)
 
     async def async_shutdown(self) -> None:
         """Shutdown the coordinator."""

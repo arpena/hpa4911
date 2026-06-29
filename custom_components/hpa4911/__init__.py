@@ -3,35 +3,44 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
+from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN
-from .coordinator import get_coordinator
+from .coordinator import HPA4911Coordinator, get_coordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+type HPA4911ConfigEntry = ConfigEntry[HPA4911Coordinator]
+
+async def async_setup_entry(hass: HomeAssistant, entry: HPA4911ConfigEntry) -> bool:
     """Set up Local BGH Smart from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    
     # Get or create the shared coordinator
     coordinator = await get_coordinator(hass)
     
     # Add this device to the coordinator
     coordinator.add_device(entry)
     
-    # Store the coordinator reference for this entry
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    # Verify we can connect before proceeding
+    try:
+        await coordinator._async_setup()
+    except Exception as err:
+        coordinator.remove_device(entry)
+        raise ConfigEntryNotReady(
+            f"Unable to connect to device: {err}"
+        ) from err
+    
+    # Store the coordinator reference in runtime_data
+    entry.runtime_data = coordinator
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: HPA4911ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator = entry.runtime_data
         # Remove this device from the coordinator
         coordinator.remove_device(entry)
         

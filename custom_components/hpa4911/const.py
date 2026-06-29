@@ -7,4 +7,4 @@ DOMAIN: Final = "hpa4911"
 INTEGRATION_NAME: Final = "Local BGH Smart"
 
 MANUFACTURER: Final = "BGH"
-MODEL: Final = "HPA4911 Smart Control Kit",
+MODEL: Final = "HPA4911 Smart Control Kit"

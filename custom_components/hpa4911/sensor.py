@@ -11,7 +11,6 @@ from homeassistant.helpers.entity import EntityCategory
 
 from .coordinator import HPA4911Coordinator
 from .entity import HPA4911Entity
-from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up HPA4911 sensors."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data
     mac = config_entry.data["mac"]
     
     # Create sensor entities
@@ -54,7 +53,7 @@ class HPA4911FirmwareSensor(HPA4911Entity, SensorEntity):
         if device_status and device_status.firmware is not None:
             self._attr_native_value = device_status.firmware
             self._attr_extra_state_attributes = {"firmware_info": device_status.firmware_info}
-            _LOGGER.debug(f"Updated firmware sensor to {device_status.firmware}")
+            _LOGGER.debug("Updated firmware sensor to %s", device_status.firmware)
         
         super()._handle_coordinator_update()
 
@@ -84,7 +83,7 @@ class HPA4911BatterySensor(HPA4911Entity, SensorEntity):
                 _LOGGER.debug("Battery level received 0. Maintaining old value")
             else:
                 self._attr_native_value = device_status.battery_level
-                _LOGGER.debug(f"Updated battery sensor to {device_status.battery_level}")
+                _LOGGER.debug("Updated battery sensor to %s", device_status.battery_level)
         
         super()._handle_coordinator_update()
     

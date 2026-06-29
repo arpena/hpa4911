@@ -17,7 +17,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import HPA4911Coordinator
 from .entity import HPA4911Entity
-from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,12 +61,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up HPA4911 climate entities."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data
     mac = config_entry.data["mac"]
-    
-    # Set up the coordinator if not already done
-    if coordinator.client is None:
-        await coordinator._async_setup()
     
     # Create climate entity
     async_add_entities([HPA4911Climate(coordinator, mac)])
