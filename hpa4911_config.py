@@ -68,8 +68,8 @@ Supported IR codecs:
 
 Sensor modes (for set-ir-codec --sensor):
   none(0)          - No vibration sensor (default)
-  powered-by-ac(1) - IR unit powered from AC indoor unit
-  near-ac(2)       - IR unit placed near AC indoor unit (vibration detect)
+  powered-by-ac(1) - Mains device powers the AC as a passthrough (direct vibration detection)
+  near-ac(2)       - Mains device plugged into a different socket than the AC (proximity vibration)
   external(3)      - External sensor
 """
 
